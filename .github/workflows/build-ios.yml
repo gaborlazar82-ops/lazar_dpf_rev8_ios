@@ -1,0 +1,37 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Forráskód letöltése
+        uses: actions/checkout@v4
+
+      - name: Flutter környezet beállítása
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Függőségek letöltése
+        run: flutter pub get
+
+      - name: iOS Build készítése (aláírás nélkül)
+        run: flutter build ios --release --no-codesign
+
+      - name: IPA csomag összeállítása Payload mappából
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r Lazar_DPF_Monitor.ipa Payload
+
+      - name: IPA mentése letölthető Artifactként
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lazar_DPF_Monitor_IPA
+          path: Lazar_DPF_Monitor.ipa
