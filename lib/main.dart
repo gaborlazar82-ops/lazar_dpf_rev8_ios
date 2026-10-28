@@ -41,7 +41,7 @@ class _DpfDashboardScreenState extends State<DpfDashboardScreen> {
   String dp = "-";
   String egt = "-";
   String eot = "-";
-  String statusMessage = "Bluetooth keresése...";
+  String statusMessage = "Bluetooth ellenőrzése...";
   bool isConnected = false;
 
   // BLE vezérlők
@@ -49,21 +49,50 @@ class _DpfDashboardScreenState extends State<DpfDashboardScreen> {
   StreamSubscription<List<ScanResult>>? scanSubscription;
   StreamSubscription<BluetoothConnectionState>? connectionSubscription;
   StreamSubscription<List<int>>? characteristicSubscription;
+  StreamSubscription<BluetoothAdapterState>? adapterStateSubscription;
   final StringBuffer _rxBuffer = StringBuffer();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
   void initState() {
     super.initState();
-    startBleScan();
+    initBluetoothAndScan();
+  }
+
+  void initBluetoothAndScan() {
+    // Figyeljük a Bluetooth állapotát (Unknown -> On átmenet kezelése iOS-en)
+    adapterStateSubscription = FlutterBluePlus.adapterState.listen((state) {
+      if (state == BluetoothAdapterState.on) {
+        if (!isConnected && connectedDevice == null) {
+          startBleScan();
+        }
+      } else if (state == BluetoothAdapterState.off) {
+        setState(() => statusMessage = "Kérlek kapcsold be a Bluetooth-t!");
+      } else if (state == BluetoothAdapterState.unauthorized) {
+        setState(() => statusMessage = "Bluetooth engedély megtagadva!");
+      } else {
+        setState(() => statusMessage = "Bluetooth inicializálása...");
+      }
+    });
   }
 
   void startBleScan() async {
     setState(() => statusMessage = "Eszköz keresése (LAZAR_DPF)...");
 
     try {
+      // Megvárjuk, amíg az iOS adapter biztosan ON állapotba lép
+      await FlutterBluePlus.adapterState
+          .where((state) => state == BluetoothAdapterState.on)
+          .first;
+
+      // Ha már futott egy korábbi keresés, leállítjuk
+      if (FlutterBluePlus.isScanningNow) {
+        await FlutterBluePlus.stopScan();
+      }
+
       await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
 
+      scanSubscription?.cancel();
       scanSubscription = FlutterBluePlus.scanResults.listen((results) async {
         for (ScanResult r in results) {
           String devName = r.device.platformName;
@@ -90,6 +119,7 @@ class _DpfDashboardScreenState extends State<DpfDashboardScreen> {
         statusMessage = "Csatlakozva";
       });
 
+      connectionSubscription?.cancel();
       connectionSubscription = device.connectionState.listen((state) {
         if (state == BluetoothConnectionState.disconnected) {
           setState(() {
@@ -107,6 +137,7 @@ class _DpfDashboardScreenState extends State<DpfDashboardScreen> {
         for (BluetoothCharacteristic characteristic in service.characteristics) {
           if (characteristic.properties.notify || characteristic.properties.indicate) {
             await characteristic.setNotifyValue(true);
+            characteristicSubscription?.cancel();
             characteristicSubscription = characteristic.lastValueStream.listen((data) {
               onDataReceived(data);
             });
@@ -207,6 +238,7 @@ class _DpfDashboardScreenState extends State<DpfDashboardScreen> {
 
   @override
   void dispose() {
+    adapterStateSubscription?.cancel();
     scanSubscription?.cancel();
     connectionSubscription?.cancel();
     characteristicSubscription?.cancel();

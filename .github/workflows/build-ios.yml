@@ -18,10 +18,8 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: iOS platform fájlok és konfigurációk generálása
-        run: |
-          flutter create . --platforms=ios
-          flutter pub get
+      - name: Függőségek letöltése
+        run: flutter pub get
 
       - name: iOS Build készítése (aláírás nélkül)
         run: flutter build ios --release --no-codesign
