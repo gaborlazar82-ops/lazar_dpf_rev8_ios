@@ -1,0 +1,27 @@
+workflows:
+  ios-release-ipa:
+    name: Build iOS IPA
+    max_build_duration: 30
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Flutter függőségek letöltése
+        script: |
+          flutter packages pub get
+      - name: CocoaPods telepítés
+        script: |
+          find . -maxdepth 3 -name Podfile
+          cd ios && pod install
+      - name: Flutter iOS Release Build készítése
+        script: |
+          flutter build ios --release --no-codesign
+      - name: IPA csomag összeállítása
+        script: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r Lazar_DPF_Monitor.ipa Payload
+    artifacts:
+      - Lazar_DPF_Monitor.ipa
